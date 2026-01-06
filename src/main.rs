@@ -12,7 +12,7 @@ use tokio::task::JoinError;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-fn export_pdf_to_jpegs(bytes: &[u8]) -> Result<(), AppError> {
+fn export_pdf_to_jpegs(bytes: &[u8]) -> Result<String, AppError> {
     let pdfium = Pdfium::default();
     let document = pdfium.load_pdf_from_byte_slice(bytes, None)?;
 
@@ -24,7 +24,8 @@ fn export_pdf_to_jpegs(bytes: &[u8]) -> Result<(), AppError> {
             .map_err(|_| PdfiumError::ImageError)?;
     }
 
-    Ok(())
+    let id = blake3::hash(bytes).to_hex().to_string();
+    Ok(id)
 }
 
 #[tokio::main]

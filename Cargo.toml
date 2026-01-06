@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 axum = { version = "0.8.8", features = ["multipart"] }
+blake3 = "1.8.2"
 image = "0.25.9"
 pdfium-render = { version = "0.8.37", features = ["thread_safe"] }
 serde = { version = "1.0.228", features = ["derive"] }
