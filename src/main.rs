@@ -67,7 +67,8 @@ impl ObjectStorage {
             .key(&image.name)
             .body(image.stream)
             .send()
-            .await?;
+            .await
+            .map_err(Box::new)?;
 
         Ok(image.name)
     }
@@ -189,7 +190,7 @@ enum AppError {
     #[error("task error: {0}")]
     Task(#[from] JoinError),
     #[error("s3 error: {0}")]
-    S3(#[from] SdkError<PutObjectError>),
+    S3(#[from] Box<SdkError<PutObjectError>>),
 }
 #[derive(Serialize)]
 struct ErrorResponse {
