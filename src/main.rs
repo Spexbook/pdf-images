@@ -5,12 +5,24 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
+use parenv::Environment;
 use pdfium_render::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Debug, Environment)]
+#[parenv(prefix = "PDF_")]
+struct Env {
+    /// The R2 account ID.
+    account_id: String,
+    /// The R2 access key ID.
+    key_id: String,
+    /// The R2 access key secret.
+    secret: String,
+}
 
 fn export_pdf_to_jpegs(bytes: &[u8]) -> Result<String, AppError> {
     let pdfium = Pdfium::default();
@@ -30,6 +42,8 @@ fn export_pdf_to_jpegs(bytes: &[u8]) -> Result<String, AppError> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let env = Env::parse();
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
