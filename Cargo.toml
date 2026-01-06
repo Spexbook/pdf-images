@@ -1,0 +1,8 @@
+[package]
+name = "pdf-images"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+image = "0.25.9"
+pdfium-render = "0.8.37"
