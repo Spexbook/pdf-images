@@ -1,6 +1,9 @@
+use aws_sdk_s3::{
+    self as s3, error::SdkError, operation::put_object::PutObjectError, primitives::ByteStream,
+};
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Multipart, multipart::MultipartError},
+    extract::{DefaultBodyLimit, Multipart, State, multipart::MultipartError},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
@@ -8,8 +11,9 @@ use axum::{
 use parenv::Environment;
 use pdfium_render::prelude::*;
 use serde::Serialize;
+use std::io::Cursor;
 use thiserror::Error;
-use tokio::task::JoinError;
+use tokio::task::{JoinError, JoinSet};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -22,27 +26,92 @@ struct Env {
     key_id: String,
     /// The R2 access key secret.
     secret: String,
+    /// The R2 bucket.
+    bucket: String,
 }
 
-fn export_pdf_to_jpegs(bytes: &[u8]) -> Result<String, AppError> {
+#[derive(Clone)]
+struct ObjectStorage {
+    bucket: Box<str>,
+    client: s3::Client,
+}
+
+impl ObjectStorage {
+    async fn new(env: &Env) -> Self {
+        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .endpoint_url(format!(
+                "https://{}.r2.cloudflarestorage.com",
+                env.account_id
+            ))
+            .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                env.key_id.to_owned(),
+                env.secret.to_owned(),
+                None,
+                None,
+                "R2",
+            ))
+            .region("auto")
+            .load()
+            .await;
+
+        Self {
+            bucket: env.bucket.to_owned().into_boxed_str(),
+            client: s3::Client::new(&config),
+        }
+    }
+
+    pub async fn put_image(&self, image: PdfImage) -> Result<String, AppError> {
+        self.client
+            .put_object()
+            .bucket(self.bucket.as_ref())
+            .key(&image.name)
+            .body(image.stream)
+            .send()
+            .await?;
+
+        Ok(image.name)
+    }
+}
+
+struct PdfImage {
+    name: String,
+    stream: ByteStream,
+}
+
+fn process_pdf(bytes: &[u8]) -> Result<Vec<PdfImage>, AppError> {
     let pdfium = Pdfium::default();
     let document = pdfium.load_pdf_from_byte_slice(bytes, None)?;
 
-    for (index, page) in document.pages().iter().enumerate() {
-        page.render_with_config(&PdfRenderConfig::default())?
-            .as_image()
-            .into_rgb8()
-            .save_with_format(format!("page-{}.jpg", index), image::ImageFormat::Jpeg)
-            .map_err(|_| PdfiumError::ImageError)?;
-    }
-
     let id = blake3::hash(bytes).to_hex().to_string();
-    Ok(id)
+
+    let images = document
+        .pages()
+        .iter()
+        .flat_map(|page| {
+            let mut output = Cursor::new(Vec::new());
+
+            page.render_with_config(&PdfRenderConfig::default())
+                .ok()?
+                .as_image()
+                .write_to(&mut output, image::ImageFormat::Png)
+                .ok()?;
+
+            let stream = ByteStream::from(output.into_inner());
+
+            Some(PdfImage {
+                name: format!("{id}.png"),
+                stream,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(images)
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let env = Env::parse();
+    let storage = ObjectStorage::new(&env).await;
 
     tracing_subscriber::registry()
         .with(
@@ -59,7 +128,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(RequestBodyLimitLayer::new(
             250 * 1024 * 1024, /* 250mb */
         ))
-        .layer(tower_http::trace::TraceLayer::new_for_http());
+        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .with_state(storage);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
@@ -71,21 +141,41 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_pdf_upload(mut multipart: Multipart) -> Result<Json<UploadResponse>, AppError> {
+async fn handle_pdf_upload(
+    State(storage): State<ObjectStorage>,
+    mut multipart: Multipart,
+) -> Result<Json<UploadResponse>, AppError> {
     let field = multipart
         .next_field()
         .await?
         .ok_or_else(|| AppError::FieldNotFound)?;
 
     let data = field.bytes().await?;
-    tokio::task::spawn_blocking(move || export_pdf_to_jpegs(&data)).await??;
+    let images = tokio::task::spawn_blocking(move || process_pdf(&data)).await??;
 
-    Ok(Json(UploadResponse { success: true }))
+    let mut set = JoinSet::new();
+
+    for image in images {
+        let storage = storage.clone();
+        set.spawn(async move { storage.put_image(image).await });
+    }
+
+    let images = set
+        .join_all()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Json(UploadResponse {
+        success: true,
+        images,
+    }))
 }
 
 #[derive(Debug, Serialize)]
 struct UploadResponse {
     success: bool,
+    images: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -98,6 +188,8 @@ enum AppError {
     FieldNotFound,
     #[error("task error: {0}")]
     Task(#[from] JoinError),
+    #[error("s3 error: {0}")]
+    S3(#[from] SdkError<PutObjectError>),
 }
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -122,6 +214,10 @@ impl IntoResponse for AppError {
                 "Form does not contain any fields".to_owned(),
             ),
             AppError::Task(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Server Error".to_owned(),
+            ),
+            AppError::S3(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal Server Error".to_owned(),
             ),
