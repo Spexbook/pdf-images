@@ -4,5 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
+axum = { version = "0.8.8", features = ["multipart"] }
 image = "0.25.9"
-pdfium-render = "0.8.37"
+pdfium-render = { version = "0.8.37", features = ["thread_safe"] }
+thiserror = "2.0.17"
+tokio = { version = "1.49.0", features = ["full"] }
+tower-http = { version = "0.6.8", features = ["limit", "trace"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
