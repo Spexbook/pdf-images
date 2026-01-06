@@ -88,19 +88,21 @@ fn process_pdf(bytes: &[u8]) -> Result<Vec<PdfImage>, AppError> {
     let images = document
         .pages()
         .iter()
-        .flat_map(|page| {
+        .enumerate()
+        .flat_map(|(idx, page)| {
             let mut output = Cursor::new(Vec::new());
 
             page.render_with_config(&PdfRenderConfig::default())
                 .ok()?
                 .as_image()
+                .adjust_contrast(0.1)
                 .write_to(&mut output, image::ImageFormat::Png)
                 .ok()?;
 
             let stream = ByteStream::from(output.into_inner());
 
             Some(PdfImage {
-                name: format!("{id}.png"),
+                name: format!("{id}-{idx}.png"),
                 stream,
             })
         })
