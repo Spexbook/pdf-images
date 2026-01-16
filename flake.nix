@@ -48,11 +48,26 @@
         };
       });
 
-      packages = forAllSystems (pkgs: {
+      packages = forAllSystems (pkgs: rec {
         default = pkgs.rustPlatform.buildRustPackage {
           pname = "pdf-images";
           version = "0.1.0";
-          src = self;
+          src = pkgs.lib.cleanSourceWith {
+            src = self;
+            filter =
+              path: type:
+              let
+                baseName = baseNameOf path;
+              in
+              !builtins.elem baseName [
+                "flake.nix"
+                "flake.lock"
+                "README.md"
+                ".helix"
+                ".envrc"
+                ".gitignore"
+              ];
+          };
 
           cargoLock.lockFile = ./Cargo.lock;
 
