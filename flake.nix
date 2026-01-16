@@ -63,6 +63,21 @@
               --set PDFIUM_DYNAMIC_LIB_PATH "${pkgs.pdfium-binaries}/lib"
           '';
         };
+
+        docker = pkgs.dockerTools.buildLayeredImage {
+          name = "pdf-images";
+          tag = "latest";
+          contents = [
+            default
+            pkgs.cacert
+          ];
+          config = {
+            Cmd = [ "${default}/bin/pdf-images" ];
+            Env = [
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            ];
+          };
+        };
       });
 
       formatter = forAllSystems (
