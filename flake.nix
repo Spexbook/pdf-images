@@ -55,9 +55,9 @@
           src = pkgs.lib.cleanSourceWith {
             src = self;
             filter =
-              path: type:
+              filePath: type:
               let
-                baseName = baseNameOf path;
+                baseName = baseNameOf filePath;
               in
               !builtins.elem baseName [
                 "flake.nix"
