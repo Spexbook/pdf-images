@@ -44,7 +44,23 @@
             pkgs.rust-bin.stable.latest.default
           ];
 
-          shellHook = ''
+          env.PDFIUM_DYNAMIC_LIB_PATH = "${pkgs.pdfium-binaries}/lib";
+        };
+      });
+
+      packages = forAllSystems (pkgs: {
+        default = pkgs.rustPlatform.buildRustPackage {
+          pname = "pdf-images";
+          version = "0.1.0";
+          src = self;
+
+          cargoLock.lockFile = ./Cargo.lock;
+
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+
+          postInstall = ''
+            wrapProgram $out/bin/pdf-images \
+              --set PDFIUM_DYNAMIC_LIB_PATH "${pkgs.pdfium-binaries}/lib"
           '';
         };
       });
