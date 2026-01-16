@@ -28,6 +28,8 @@ struct Env {
     secret: String,
     /// The R2 bucket.
     bucket: String,
+    /// The request body limit in megabytes.
+    body_limit: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -125,12 +127,12 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let body_limit = env.body_limit.unwrap_or(250) * 1024 * 1024;
+
     let app = Router::new()
         .route("/", post(handle_pdf_upload))
         .layer(DefaultBodyLimit::disable())
-        .layer(RequestBodyLimitLayer::new(
-            250 * 1024 * 1024, /* 250mb */
-        ))
+        .layer(RequestBodyLimitLayer::new(body_limit))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(storage);
 

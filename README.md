@@ -8,7 +8,7 @@ A Rust web service that converts PDF pages to PNG images and uploads them to Clo
 - **Cloudflare R2 integration** — Automatically uploads generated images to R2 object storage
 - **Content-addressed naming** — Uses BLAKE3 hashing for deterministic, collision-free image names
 - **Parallel uploads** — Uploads images concurrently for better performance
-- **Large file support** — Accepts PDFs up to 250MB
+- **Large file support** — Accepts PDFs up to 250MB (configurable)
 
 ## API
 
@@ -42,12 +42,13 @@ Each image name follows the format `{blake3_hash}-{page_index}.png`.
 
 The service is configured via environment variables with the `PDF_` prefix:
 
-| Variable           | Description                |
-| ------------------ | -------------------------- |
-| `PDF_ACCOUNT_ID`   | Cloudflare R2 account ID   |
-| `PDF_KEY_ID`       | R2 access key ID           |
-| `PDF_SECRET`       | R2 access key secret       |
-| `PDF_BUCKET`       | R2 bucket name             |
+| Variable           | Description                              |
+| ------------------ | ---------------------------------------- |
+| `PDF_ACCOUNT_ID`   | Cloudflare R2 account ID                 |
+| `PDF_KEY_ID`       | R2 access key ID                         |
+| `PDF_SECRET`       | R2 access key secret                     |
+| `PDF_BUCKET`       | R2 bucket name                           |
+| `PDF_BODY_LIMIT`   | Request body limit in MB (default: 250)  |
 
 ## Running
 
