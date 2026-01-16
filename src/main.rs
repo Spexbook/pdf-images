@@ -3,19 +3,87 @@ use aws_sdk_s3::{
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Multipart, State, multipart::MultipartError},
+    extract::{DefaultBodyLimit, Multipart, Query, State, multipart::MultipartError},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
 };
 use parenv::Environment;
 use pdfium_render::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use thiserror::Error;
 use tokio::task::{JoinError, JoinSet};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum OutputFormat {
+    #[default]
+    Png,
+    Jpeg,
+    Gif,
+    #[serde(rename = "webp")]
+    WebP,
+    Pnm,
+    Tiff,
+    Tga,
+    Bmp,
+    Ico,
+    Hdr,
+    #[serde(rename = "openexr")]
+    OpenExr,
+    Farbfeld,
+    Avif,
+    Qoi,
+}
+
+impl OutputFormat {
+    fn as_image_format(&self) -> image::ImageFormat {
+        match self {
+            OutputFormat::Png => image::ImageFormat::Png,
+            OutputFormat::Jpeg => image::ImageFormat::Jpeg,
+            OutputFormat::Gif => image::ImageFormat::Gif,
+            OutputFormat::WebP => image::ImageFormat::WebP,
+            OutputFormat::Pnm => image::ImageFormat::Pnm,
+            OutputFormat::Tiff => image::ImageFormat::Tiff,
+            OutputFormat::Tga => image::ImageFormat::Tga,
+            OutputFormat::Bmp => image::ImageFormat::Bmp,
+            OutputFormat::Ico => image::ImageFormat::Ico,
+            OutputFormat::Hdr => image::ImageFormat::Hdr,
+            OutputFormat::OpenExr => image::ImageFormat::OpenExr,
+            OutputFormat::Farbfeld => image::ImageFormat::Farbfeld,
+            OutputFormat::Avif => image::ImageFormat::Avif,
+            OutputFormat::Qoi => image::ImageFormat::Qoi,
+        }
+    }
+
+    fn extension(&self) -> &'static str {
+        match self {
+            OutputFormat::Png => "png",
+            OutputFormat::Jpeg => "jpg",
+            OutputFormat::Gif => "gif",
+            OutputFormat::WebP => "webp",
+            OutputFormat::Pnm => "pnm",
+            OutputFormat::Tiff => "tiff",
+            OutputFormat::Tga => "tga",
+            OutputFormat::Bmp => "bmp",
+            OutputFormat::Ico => "ico",
+            OutputFormat::Hdr => "hdr",
+            OutputFormat::OpenExr => "exr",
+            OutputFormat::Farbfeld => "ff",
+            OutputFormat::Avif => "avif",
+            OutputFormat::Qoi => "qoi",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct UploadQuery {
+    #[serde(default)]
+    format: OutputFormat,
+}
 
 #[derive(Debug, Environment)]
 #[parenv(prefix = "PDF_")]
@@ -81,11 +149,13 @@ struct PdfImage {
     stream: ByteStream,
 }
 
-fn process_pdf(bytes: &[u8]) -> Result<Vec<PdfImage>, AppError> {
+fn process_pdf(bytes: &[u8], format: OutputFormat) -> Result<Vec<PdfImage>, AppError> {
     let pdfium = Pdfium::default();
     let document = pdfium.load_pdf_from_byte_slice(bytes, None)?;
 
     let id = blake3::hash(bytes).to_hex().to_string();
+    let ext = format.extension();
+    let image_format = format.as_image_format();
 
     let images = document
         .pages()
@@ -98,13 +168,13 @@ fn process_pdf(bytes: &[u8]) -> Result<Vec<PdfImage>, AppError> {
                 .ok()?
                 .as_image()
                 .adjust_contrast(0.1)
-                .write_to(&mut output, image::ImageFormat::Png)
+                .write_to(&mut output, image_format)
                 .ok()?;
 
             let stream = ByteStream::from(output.into_inner());
 
             Some(PdfImage {
-                name: format!("{id}-{idx}.png"),
+                name: format!("{id}-{idx}.{ext}"),
                 stream,
             })
         })
@@ -148,6 +218,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn handle_pdf_upload(
     State(storage): State<ObjectStorage>,
+    Query(query): Query<UploadQuery>,
     mut multipart: Multipart,
 ) -> Result<Json<UploadResponse>, AppError> {
     let field = multipart
@@ -156,7 +227,8 @@ async fn handle_pdf_upload(
         .ok_or_else(|| AppError::FieldNotFound)?;
 
     let data = field.bytes().await?;
-    let images = tokio::task::spawn_blocking(move || process_pdf(&data)).await??;
+    let format = query.format;
+    let images = tokio::task::spawn_blocking(move || process_pdf(&data, format)).await??;
 
     let mut set = JoinSet::new();
 

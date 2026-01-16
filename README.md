@@ -1,10 +1,11 @@
 # pdf-images
 
-A Rust web service that converts PDF pages to PNG images and uploads them to Cloudflare R2 storage.
+A Rust web service that converts PDF pages to images and uploads them to Cloudflare R2 storage.
 
 ## Features
 
-- **PDF to PNG conversion** — Renders each page of a PDF document as a high-quality PNG image
+- **PDF to image conversion** — Renders each page of a PDF document as a high-quality image
+- **Multiple output formats** — Supports PNG, JPEG, GIF, WebP, TIFF, BMP, and more
 - **Cloudflare R2 integration** — Automatically uploads generated images to R2 object storage
 - **Content-addressed naming** — Uses BLAKE3 hashing for deterministic, collision-free image names
 - **Parallel uploads** — Uploads images concurrently for better performance
@@ -16,10 +17,44 @@ A Rust web service that converts PDF pages to PNG images and uploads them to Clo
 
 Upload a PDF file via multipart form data.
 
+**Query Parameters:**
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `format`  | Output image format | `png` |
+
+**Supported Formats:**
+
+| Format     | Value      | Extension |
+|------------|------------|-----------|
+| PNG        | `png`      | .png      |
+| JPEG       | `jpeg`     | .jpg      |
+| GIF        | `gif`      | .gif      |
+| WebP       | `webp`     | .webp     |
+| PNM        | `pnm`      | .pnm      |
+| TIFF       | `tiff`     | .tiff     |
+| TGA        | `tga`      | .tga      |
+| BMP        | `bmp`      | .bmp      |
+| ICO        | `ico`      | .ico      |
+| HDR        | `hdr`      | .hdr      |
+| OpenEXR    | `openexr`  | .exr      |
+| Farbfeld   | `farbfeld` | .ff       |
+| AVIF       | `avif`     | .avif     |
+| QOI        | `qoi`      | .qoi      |
+
 **Request:**
 
 ```bash
+# Default (PNG)
 curl -X POST http://localhost:3000 \
+  -F "file=@document.pdf"
+
+# JPEG format
+curl -X POST "http://localhost:3000?format=jpeg" \
+  -F "file=@document.pdf"
+
+# WebP format
+curl -X POST "http://localhost:3000?format=webp" \
   -F "file=@document.pdf"
 ```
 
@@ -36,7 +71,7 @@ curl -X POST http://localhost:3000 \
 }
 ```
 
-Each image name follows the format `{blake3_hash}-{page_index}.png`.
+Each image name follows the format `{blake3_hash}-{page_index}.{extension}`.
 
 ## Configuration
 
