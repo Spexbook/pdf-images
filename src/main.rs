@@ -17,6 +17,8 @@ use tokio::task::{JoinError, JoinSet};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+type BoxStr = Box<str>;
+
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum OutputFormat {
@@ -83,6 +85,7 @@ impl OutputFormat {
 struct UploadQuery {
     #[serde(default)]
     format: OutputFormat,
+    token: Option<String>,
 }
 
 #[derive(Debug, Environment)]
@@ -98,11 +101,19 @@ struct Env {
     bucket: String,
     /// The request body limit in megabytes.
     body_limit: Option<usize>,
+    /// Optional security token for request authentication.
+    token: Option<String>,
+}
+
+#[derive(Clone)]
+struct AppState {
+    storage: ObjectStorage,
+    token: Option<BoxStr>,
 }
 
 #[derive(Clone)]
 struct ObjectStorage {
-    bucket: Box<str>,
+    bucket: BoxStr,
     client: s3::Client,
 }
 
@@ -187,6 +198,10 @@ fn process_pdf(bytes: &[u8], format: OutputFormat) -> Result<Vec<PdfImage>, AppE
 async fn main() -> anyhow::Result<()> {
     let env = Env::parse();
     let storage = ObjectStorage::new(&env).await;
+    let state = AppState {
+        storage,
+        token: env.token.map(|t| t.into_boxed_str()),
+    };
 
     tracing_subscriber::registry()
         .with(
@@ -204,7 +219,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(body_limit))
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        .with_state(storage);
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
@@ -217,10 +232,18 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn handle_pdf_upload(
-    State(storage): State<ObjectStorage>,
+    State(state): State<AppState>,
     Query(query): Query<UploadQuery>,
     mut multipart: Multipart,
 ) -> Result<Json<UploadResponse>, AppError> {
+    // Validate token if one is configured
+    if let Some(expected_token) = &state.token {
+        match &query.token {
+            Some(provided_token) if provided_token.as_str() == expected_token.as_ref() => {}
+            _ => return Err(AppError::Unauthorized),
+        }
+    }
+
     let field = multipart
         .next_field()
         .await?
@@ -233,7 +256,7 @@ async fn handle_pdf_upload(
     let mut set = JoinSet::new();
 
     for image in images {
-        let storage = storage.clone();
+        let storage = state.storage.clone();
         set.spawn(async move { storage.put_image(image).await });
     }
 
@@ -267,6 +290,8 @@ enum AppError {
     Task(#[from] JoinError),
     #[error("s3 error: {0}")]
     S3(#[from] Box<SdkError<PutObjectError>>),
+    #[error("unauthorized: invalid or missing token")]
+    Unauthorized,
 }
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -297,6 +322,10 @@ impl IntoResponse for AppError {
             AppError::S3(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal Server Error".to_owned(),
+            ),
+            AppError::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                "Unauthorized: invalid or missing token".to_owned(),
             ),
         };
 

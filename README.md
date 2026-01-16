@@ -22,6 +22,7 @@ Upload a PDF file via multipart form data.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `format`  | Output image format | `png` |
+| `token`   | Security token (required if `PDF_TOKEN` is set) | — |
 
 **Supported Formats:**
 
@@ -56,6 +57,14 @@ curl -X POST "http://localhost:3000?format=jpeg" \
 # WebP format
 curl -X POST "http://localhost:3000?format=webp" \
   -F "file=@document.pdf"
+
+# With security token (if PDF_TOKEN is configured)
+curl -X POST "http://localhost:3000?token=your-secret-token" \
+  -F "file=@document.pdf"
+
+# With both format and token
+curl -X POST "http://localhost:3000?format=jpeg&token=your-secret-token" \
+  -F "file=@document.pdf"
 ```
 
 **Response:**
@@ -84,6 +93,7 @@ The service is configured via environment variables with the `PDF_` prefix:
 | `PDF_SECRET`       | R2 access key secret                     |
 | `PDF_BUCKET`       | R2 bucket name                           |
 | `PDF_BODY_LIMIT`   | Request body limit in MB (default: 250)  |
+| `PDF_TOKEN`        | Security token for request authentication (optional) |
 
 ## Running
 
@@ -93,6 +103,9 @@ export PDF_ACCOUNT_ID="your-account-id"
 export PDF_KEY_ID="your-key-id"
 export PDF_SECRET="your-secret"
 export PDF_BUCKET="your-bucket"
+
+# Optional: Enable token authentication
+export PDF_TOKEN="your-secret-token"
 
 # Run the server
 cargo run
