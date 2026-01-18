@@ -11,6 +11,7 @@ use axum::{
 use parenv::Environment;
 use pdfium_render::prelude::{PdfRenderConfig, Pdfium, PdfiumError};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::Cursor;
 use thiserror::Error;
 use tokio::task::{JoinError, JoinSet};
@@ -81,11 +82,96 @@ impl OutputFormat {
     }
 }
 
+struct PageSelection(HashSet<usize>);
+
+impl PageSelection {
+    fn contains(&self, page: usize) -> bool {
+        self.0.contains(&page)
+    }
+
+    fn validate(&self, total_pages: usize) -> Result<(), AppError> {
+        if let Some(&max_page) = self.0.iter().max()
+            && max_page >= total_pages
+        {
+            return Err(AppError::InvalidPageRange(format!(
+                "page {} is out of range (document has {} pages)",
+                max_page + 1,
+                total_pages
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl std::str::FromStr for PageSelection {
+    type Err = AppError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let mut pages = HashSet::new();
+
+        for part in input.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+
+            if let Some((start, end)) = part.split_once('-') {
+                let start: usize = start.trim().parse().map_err(|_| {
+                    AppError::InvalidPageRange(format!("invalid number: {}", start))
+                })?;
+                let end: usize = end
+                    .trim()
+                    .parse()
+                    .map_err(|_| AppError::InvalidPageRange(format!("invalid number: {}", end)))?;
+
+                if start == 0 || end == 0 {
+                    return Err(AppError::InvalidPageRange(
+                        "page numbers must be 1 or greater".to_string(),
+                    ));
+                }
+                if start > end {
+                    return Err(AppError::InvalidPageRange(format!(
+                        "invalid range: start ({}) > end ({})",
+                        start, end
+                    )));
+                }
+
+                // Convert from 1-indexed to 0-indexed
+                for page in (start - 1)..end {
+                    pages.insert(page);
+                }
+            } else {
+                let page: usize = part
+                    .parse()
+                    .map_err(|_| AppError::InvalidPageRange(format!("invalid number: {}", part)))?;
+
+                if page == 0 {
+                    return Err(AppError::InvalidPageRange(
+                        "page numbers must be 1 or greater".to_string(),
+                    ));
+                }
+
+                // Convert from 1-indexed to 0-indexed
+                pages.insert(page - 1);
+            }
+        }
+
+        if pages.is_empty() {
+            return Err(AppError::InvalidPageRange(
+                "no valid pages specified".to_string(),
+            ));
+        }
+
+        Ok(PageSelection(pages))
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct UploadQuery {
     #[serde(default)]
     format: OutputFormat,
     token: Option<String>,
+    pages: Option<String>,
 }
 
 #[derive(Debug, Environment)]
@@ -162,7 +248,7 @@ struct PdfImage {
     stream: ByteStream,
 }
 
-fn process_pdf(bytes: &[u8], format: OutputFormat) -> Result<Vec<PdfImage>, AppError> {
+fn process_pdf(bytes: &[u8], query: UploadQuery) -> Result<Vec<PdfImage>, AppError> {
     let env_bindings = std::env::var("PDFIUM_DYNAMIC_LIB_PATH")
         .map(|path| {
             let path = Pdfium::pdfium_platform_library_name_at_path(&path);
@@ -180,14 +266,26 @@ fn process_pdf(bytes: &[u8], format: OutputFormat) -> Result<Vec<PdfImage>, AppE
     let pdfium = Pdfium::new(bindings);
     let document = pdfium.load_pdf_from_byte_slice(bytes, None)?;
 
+    let total_pages = document.pages().len() as usize;
+    let page_selection: Option<PageSelection> = query.pages.map(|p| p.parse()).transpose()?;
+    if let Some(ref ps) = page_selection {
+        ps.validate(total_pages)?;
+    }
+
     let id = blake3::hash(bytes).to_hex().to_string();
-    let ext = format.extension();
-    let image_format = format.as_image_format();
+    let ext = query.format.extension();
+    let image_format = query.format.as_image_format();
 
     let images = document
         .pages()
         .iter()
         .enumerate()
+        .filter(|(idx, _)| {
+            page_selection
+                .as_ref()
+                .map(|ps| ps.contains(*idx))
+                .unwrap_or(true)
+        })
         .flat_map(|(idx, page)| {
             let mut output = Cursor::new(Vec::new());
 
@@ -274,8 +372,7 @@ async fn handle_pdf_upload(
         .ok_or_else(|| AppError::FieldNotFound)?;
 
     let data = field.bytes().await?;
-    let format = query.format;
-    let images = tokio::task::spawn_blocking(move || process_pdf(&data, format)).await??;
+    let images = tokio::task::spawn_blocking(move || process_pdf(&data, query)).await??;
 
     let mut set = JoinSet::new();
 
@@ -316,6 +413,8 @@ enum AppError {
     S3(#[from] Box<SdkError<PutObjectError>>),
     #[error("unauthorized: invalid or missing token")]
     Unauthorized,
+    #[error("invalid page range: {0}")]
+    InvalidPageRange(String),
 }
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -349,7 +448,11 @@ impl IntoResponse for AppError {
             ),
             AppError::Unauthorized => (
                 StatusCode::UNAUTHORIZED,
-                "Unauthorized: invalid or missing token".to_owned(),
+                "Invalid or missing token".to_owned(),
+            ),
+            AppError::InvalidPageRange(ref msg) => (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid page range: {}", msg),
             ),
         };
 

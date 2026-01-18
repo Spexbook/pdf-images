@@ -5,6 +5,7 @@ A Rust web service that converts PDF pages to images and uploads them to Cloudfl
 ## Features
 
 - **PDF to image conversion** — Renders each page of a PDF document as a high-quality image
+- **Page range selection** — Convert specific pages instead of the entire document (e.g., `?pages=1-5,8,10`)
 - **Multiple output formats** — Supports PNG, JPEG, GIF, WebP, TIFF, BMP, and more
 - **Cloudflare R2 integration** — Automatically uploads generated images to R2 object storage
 - **Content-addressed naming** — Uses BLAKE3 hashing for deterministic, collision-free image names
@@ -22,7 +23,17 @@ Upload a PDF file via multipart form data.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `format`  | Output image format | `png` |
+| `pages`   | Page range to convert (e.g., `1-5,8,10`) | all pages |
 | `token`   | Security token (required if `PDF_TOKEN` is set) | — |
+
+**Page Range Format:**
+
+| Example | Description |
+|---------|-------------|
+| `5` | Page 5 only |
+| `1-5` | Pages 1 through 5 |
+| `1-5,8,10` | Pages 1-5, 8, and 10 |
+| _(omitted)_ | All pages |
 
 **Supported Formats:**
 
@@ -64,6 +75,14 @@ curl -X POST "http://localhost:3000?token=your-secret-token" \
 
 # With both format and token
 curl -X POST "http://localhost:3000?format=jpeg&token=your-secret-token" \
+  -F "file=@document.pdf"
+
+# Convert only specific pages
+curl -X POST "http://localhost:3000?pages=1-5" \
+  -F "file=@document.pdf"
+
+# Convert pages 1-3, 7, and 10-12
+curl -X POST "http://localhost:3000?pages=1-3,7,10-12" \
   -F "file=@document.pdf"
 ```
 
