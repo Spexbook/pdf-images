@@ -173,6 +173,7 @@ struct UploadQuery {
     token: Option<String>,
     pages: Option<String>,
     scale: Option<f32>,
+    password: Option<String>,
 }
 
 #[derive(Debug, Environment)]
@@ -265,7 +266,7 @@ fn process_pdf(bytes: &[u8], query: UploadQuery) -> Result<Vec<PdfImage>, AppErr
     let bindings = env_bindings.unwrap_or(current_dir_bindings.or(system_bindings))?;
 
     let pdfium = Pdfium::new(bindings);
-    let document = pdfium.load_pdf_from_byte_slice(bytes, None)?;
+    let document = pdfium.load_pdf_from_byte_slice(bytes, query.password.as_deref())?;
 
     let total_pages = document.pages().len() as usize;
     let page_selection: Option<PageSelection> = query.pages.map(|p| p.parse()).transpose()?;

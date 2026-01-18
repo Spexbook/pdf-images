@@ -12,8 +12,32 @@ A Rust web service that converts PDF pages to images and uploads them to Cloudfl
 - **Content-addressed naming** — Uses BLAKE3 hashing for deterministic, collision-free image names
 - **Parallel uploads** — Uploads images concurrently for better performance
 - **Large file support** — Accepts PDFs up to 250MB (configurable)
+- **Encrypted PDF support** — Open password-protected PDFs with the `password` parameter
+- **Health check endpoint** — `GET /health` for Kubernetes and Docker healthchecks
 
 ## API
+
+### `GET /health`
+
+Health check endpoint for container orchestration (Kubernetes, Docker).
+
+**Request:**
+
+```bash
+curl http://localhost:3000/health
+```
+
+**Response:**
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Returns HTTP 200 when the service is running. No authentication required.
+
+---
 
 ### `POST /`
 
@@ -21,12 +45,13 @@ Upload a PDF file via multipart form data.
 
 **Query Parameters:**
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `format`  | Output image format | `png` |
-| `pages`   | Page range to convert (e.g., `1-5,8,10`) | all pages |
-| `scale`   | Scale factor for output images (0.1-10.0) | `1.0` |
-| `token`   | Security token (required if `PDF_TOKEN` is set) | — |
+| Parameter  | Description | Default |
+|------------|-------------|---------|
+| `format`   | Output image format | `png` |
+| `pages`    | Page range to convert (e.g., `1-5,8,10`) | all pages |
+| `scale`    | Scale factor for output images (0.1-10.0) | `1.0` |
+| `password` | Password for encrypted PDFs | — |
+| `token`    | Security token (required if `PDF_TOKEN` is set) | — |
 
 **Page Range Format:**
 
@@ -98,6 +123,10 @@ curl -X POST "http://localhost:3000?scale=0.5" \
 # Combine scale with format and pages
 curl -X POST "http://localhost:3000?scale=2.0&format=jpeg&pages=1-3" \
   -F "file=@document.pdf"
+
+# Open a password-protected PDF
+curl -X POST "http://localhost:3000?password=secretpassword" \
+  -F "file=@encrypted.pdf"
 ```
 
 **Response:**
