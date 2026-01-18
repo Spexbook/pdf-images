@@ -108,11 +108,14 @@ export PDF_BUCKET="your-bucket"
 # Optional: Enable token authentication
 export PDF_TOKEN="your-secret-token"
 
+# Optional: Customize server address (default: 127.0.0.1:3000)
+export PDF_ADDRESS="0.0.0.0:8080"
+
 # Run the server
 cargo run
 ```
 
-The server starts on `http://127.0.0.1:3000`.
+The server starts on `http://127.0.0.1:3000` by default, or on the address specified by `PDF_ADDRESS`.
 
 ## Dependencies
 
