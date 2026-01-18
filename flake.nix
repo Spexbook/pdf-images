@@ -51,7 +51,7 @@
         pkgs:
         let
           pname = "pdf-images";
-          version = "0.1.1";
+          version = "0.1.2";
         in
         rec {
           default = pkgs.rustPlatform.buildRustPackage {
