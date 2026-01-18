@@ -224,11 +224,9 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state);
 
     let address = env.address.as_deref().unwrap_or("127.0.0.1:3000");
-    let listener = tokio::net::TcpListener::bind(address)
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(address).await?;
 
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    tracing::debug!("listening on {address}");
     axum::serve(listener, app).await?;
 
     Ok(())
