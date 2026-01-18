@@ -3,3 +3,4 @@
 *.dylib
 *.jpg
 .envrc
+*.pdf

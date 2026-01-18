@@ -9,7 +9,7 @@ use axum::{
     routing::post,
 };
 use parenv::Environment;
-use pdfium_render::prelude::*;
+use pdfium_render::prelude::{PdfRenderConfig, Pdfium, PdfiumError};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use thiserror::Error;
@@ -163,7 +163,21 @@ struct PdfImage {
 }
 
 fn process_pdf(bytes: &[u8], format: OutputFormat) -> Result<Vec<PdfImage>, AppError> {
-    let pdfium = Pdfium::default();
+    let env_bindings = std::env::var("PDFIUM_DYNAMIC_LIB_PATH")
+        .map(|path| {
+            let path = Pdfium::pdfium_platform_library_name_at_path(&path);
+            Pdfium::bind_to_library(path)
+        })
+        .ok();
+
+    let current_dir_bindings =
+        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"));
+
+    let system_bindings = Pdfium::bind_to_system_library();
+
+    let bindings = env_bindings.unwrap_or(current_dir_bindings.or(system_bindings))?;
+
+    let pdfium = Pdfium::new(bindings);
     let document = pdfium.load_pdf_from_byte_slice(bytes, None)?;
 
     let id = blake3::hash(bytes).to_hex().to_string();
