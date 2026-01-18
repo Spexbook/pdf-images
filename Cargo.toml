@@ -11,7 +11,7 @@ axum = { version = "0.8.8", features = ["multipart"] }
 blake3 = "1.8.2"
 image = { version = "0.25.9", features = ["avif", "exr", "qoi", "webp"] }
 parenv = "0.1.9"
-pdfium-render = { version = "0.8.37", features = ["thread_safe"] }
+pdfium-render = { version = "0.8.37", default-features = false, features = ["thread_safe", "pdfium_7350", "image_latest"] }
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.17"
 tokio = { version = "1.49.0", features = ["full"] }

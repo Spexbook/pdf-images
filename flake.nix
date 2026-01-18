@@ -40,7 +40,6 @@
           buildInputs = [
             pkgs.xh
             pkgs.rust-analyzer
-            pkgs.pdfium-binaries
             pkgs.rust-bin.stable.latest.default
           ];
 
