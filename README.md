@@ -51,6 +51,7 @@ Upload a PDF file via multipart form data.
 | `pages`    | Page range to convert (e.g., `1-5,8,10`) | all pages |
 | `scale`    | Scale factor for output images (0.1-10.0) | `1.0` |
 | `password` | Password for encrypted PDFs | — |
+| `prefix`   | S3 key prefix for organizing images (e.g., `invoices/2026/`) | — |
 | `token`    | Security token (required if `PDF_TOKEN` is set) | — |
 
 **Page Range Format:**
@@ -127,6 +128,14 @@ curl -X POST "http://localhost:3000?scale=2.0&format=jpeg&pages=1-3" \
 # Open a password-protected PDF
 curl -X POST "http://localhost:3000?password=secretpassword" \
   -F "file=@encrypted.pdf"
+
+# Organize images in R2 with a custom prefix
+curl -X POST "http://localhost:3000?prefix=invoices/2026/" \
+  -F "file=@document.pdf"
+
+# Combine prefix with format and pages
+curl -X POST "http://localhost:3000?prefix=reports/Q1/&format=jpeg&pages=1-5" \
+  -F "file=@document.pdf"
 ```
 
 **Response:**
@@ -142,7 +151,7 @@ curl -X POST "http://localhost:3000?password=secretpassword" \
 }
 ```
 
-Each image name follows the format `{blake3_hash}-{page_index}.{extension}`.
+Each image name follows the format `{blake3_hash}-{page_index}.{extension}`, or `{prefix}{blake3_hash}-{page_index}.{extension}` when a prefix is specified.
 
 ## Configuration
 

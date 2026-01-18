@@ -174,6 +174,7 @@ struct UploadQuery {
     pages: Option<String>,
     scale: Option<f32>,
     password: Option<String>,
+    prefix: Option<String>,
 }
 
 #[derive(Debug, Environment)]
@@ -312,10 +313,12 @@ fn process_pdf(bytes: &[u8], query: UploadQuery) -> Result<Vec<PdfImage>, AppErr
 
             let stream = ByteStream::from(output.into_inner());
 
-            Some(PdfImage {
-                name: format!("{id}-{idx}.{ext}"),
-                stream,
-            })
+            let name = match &query.prefix {
+                Some(prefix) => format!("{prefix}{id}-{idx}.{ext}"),
+                None => format!("{id}-{idx}.{ext}"),
+            };
+
+            Some(PdfImage { name, stream })
         })
         .collect::<Vec<_>>();
 
