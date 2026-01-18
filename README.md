@@ -6,6 +6,7 @@ A Rust web service that converts PDF pages to images and uploads them to Cloudfl
 
 - **PDF to image conversion** — Renders each page of a PDF document as a high-quality image
 - **Page range selection** — Convert specific pages instead of the entire document (e.g., `?pages=1-5,8,10`)
+- **Resolution control** — Scale output images up or down (e.g., `?scale=2.0` for 2x size)
 - **Multiple output formats** — Supports PNG, JPEG, GIF, WebP, TIFF, BMP, and more
 - **Cloudflare R2 integration** — Automatically uploads generated images to R2 object storage
 - **Content-addressed naming** — Uses BLAKE3 hashing for deterministic, collision-free image names
@@ -24,6 +25,7 @@ Upload a PDF file via multipart form data.
 |-----------|-------------|---------|
 | `format`  | Output image format | `png` |
 | `pages`   | Page range to convert (e.g., `1-5,8,10`) | all pages |
+| `scale`   | Scale factor for output images (0.1-10.0) | `1.0` |
 | `token`   | Security token (required if `PDF_TOKEN` is set) | — |
 
 **Page Range Format:**
@@ -83,6 +85,18 @@ curl -X POST "http://localhost:3000?pages=1-5" \
 
 # Convert pages 1-3, 7, and 10-12
 curl -X POST "http://localhost:3000?pages=1-3,7,10-12" \
+  -F "file=@document.pdf"
+
+# Scale output to 2x size (higher resolution)
+curl -X POST "http://localhost:3000?scale=2.0" \
+  -F "file=@document.pdf"
+
+# Scale output to 0.5x size (smaller images)
+curl -X POST "http://localhost:3000?scale=0.5" \
+  -F "file=@document.pdf"
+
+# Combine scale with format and pages
+curl -X POST "http://localhost:3000?scale=2.0&format=jpeg&pages=1-3" \
   -F "file=@document.pdf"
 ```
 

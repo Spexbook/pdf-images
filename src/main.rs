@@ -172,6 +172,7 @@ struct UploadQuery {
     format: OutputFormat,
     token: Option<String>,
     pages: Option<String>,
+    scale: Option<f32>,
 }
 
 #[derive(Debug, Environment)]
@@ -272,6 +273,19 @@ fn process_pdf(bytes: &[u8], query: UploadQuery) -> Result<Vec<PdfImage>, AppErr
         ps.validate(total_pages)?;
     }
 
+    if let Some(scale) = query.scale
+        && !(0.1..=10.0).contains(&scale)
+    {
+        return Err(AppError::InvalidScale(
+            "scale must be between 0.1 and 10.0".to_string(),
+        ));
+    }
+
+    let render_config = match query.scale {
+        Some(scale) => PdfRenderConfig::new().scale_page_by_factor(scale),
+        None => PdfRenderConfig::new(),
+    };
+
     let id = blake3::hash(bytes).to_hex().to_string();
     let ext = query.format.extension();
     let image_format = query.format.as_image_format();
@@ -289,10 +303,9 @@ fn process_pdf(bytes: &[u8], query: UploadQuery) -> Result<Vec<PdfImage>, AppErr
         .flat_map(|(idx, page)| {
             let mut output = Cursor::new(Vec::new());
 
-            page.render_with_config(&PdfRenderConfig::default())
+            page.render_with_config(&render_config)
                 .ok()?
                 .as_image()
-                .adjust_contrast(0.1)
                 .write_to(&mut output, image_format)
                 .ok()?;
 
@@ -415,6 +428,8 @@ enum AppError {
     Unauthorized,
     #[error("invalid page range: {0}")]
     InvalidPageRange(String),
+    #[error("invalid scale: {0}")]
+    InvalidScale(String),
 }
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -454,6 +469,9 @@ impl IntoResponse for AppError {
                 StatusCode::BAD_REQUEST,
                 format!("Invalid page range: {}", msg),
             ),
+            AppError::InvalidScale(ref msg) => {
+                (StatusCode::BAD_REQUEST, format!("Invalid scale: {}", msg))
+            }
         };
 
         (status, Json(ErrorResponse { message })).into_response()
