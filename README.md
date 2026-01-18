@@ -86,14 +86,15 @@ Each image name follows the format `{blake3_hash}-{page_index}.{extension}`.
 
 The service is configured via environment variables with the `PDF_` prefix:
 
-| Variable           | Description                              |
-| ------------------ | ---------------------------------------- |
-| `PDF_ACCOUNT_ID`   | Cloudflare R2 account ID                 |
-| `PDF_KEY_ID`       | R2 access key ID                         |
-| `PDF_SECRET`       | R2 access key secret                     |
-| `PDF_BUCKET`       | R2 bucket name                           |
-| `PDF_BODY_LIMIT`   | Request body limit in MB (default: 250)  |
-| `PDF_TOKEN`        | Security token for request authentication (optional) |
+| Variable           | Description                                           |
+| ------------------ | ----------------------------------------------------- |
+| `PDF_ACCOUNT_ID`   | Cloudflare R2 account ID                              |
+| `PDF_KEY_ID`       | R2 access key ID                                      |
+| `PDF_SECRET`       | R2 access key secret                                  |
+| `PDF_BUCKET`       | R2 bucket name                                        |
+| `PDF_BODY_LIMIT`   | Request body limit in MB (default: 250)               |
+| `PDF_TOKEN`        | Security token for request authentication (optional)  |
+| `PDF_ADDRESS`      | Server listen address (default: `127.0.0.1:3000`)     |
 
 ## Running
 

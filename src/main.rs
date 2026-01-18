@@ -103,6 +103,8 @@ struct Env {
     body_limit: Option<usize>,
     /// Optional security token for request authentication.
     token: Option<String>,
+    /// The address the server will listen on.
+    address: Option<String>,
 }
 
 #[derive(Clone)]
@@ -221,7 +223,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    let address = env.address.as_deref().unwrap_or("127.0.0.1:3000");
+    let listener = tokio::net::TcpListener::bind(address)
         .await
         .unwrap();
 
