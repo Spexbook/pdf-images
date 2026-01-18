@@ -6,7 +6,7 @@ use axum::{
     extract::{DefaultBodyLimit, Multipart, Query, State, multipart::MultipartError},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
 };
 use parenv::Environment;
 use pdfium_render::prelude::{PdfRenderConfig, Pdfium, PdfiumError};
@@ -342,6 +342,7 @@ async fn main() -> anyhow::Result<()> {
     let body_limit = env.body_limit.unwrap_or(250) * 1024 * 1024;
 
     let app = Router::new()
+        .route("/health", get(health_check))
         .route("/", post(handle_pdf_upload))
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(body_limit))
@@ -410,6 +411,15 @@ async fn handle_pdf_upload(
 struct UploadResponse {
     success: bool,
     images: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
+}
+
+async fn health_check() -> Json<HealthResponse> {
+    Json(HealthResponse { status: "ok" })
 }
 
 #[derive(Debug, Error)]
