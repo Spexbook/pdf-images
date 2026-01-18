@@ -179,6 +179,20 @@ cargo run
 
 The server starts on `http://127.0.0.1:3000` by default, or on the address specified by `PDF_ADDRESS`.
 
+### Docker
+
+```bash
+docker run \
+  -e PDF_ACCOUNT_ID="your-account-id" \
+  -e PDF_KEY_ID="your-key-id" \
+  -e PDF_SECRET="your-secret" \
+  -e PDF_BUCKET="your-bucket" \
+  -e PDF_TOKEN="your-secret-token" \
+  -e PDF_ADDRESS="0.0.0.0:3000" \
+  -p 3000:3000 \
+  frectonz/pdf-images:latest
+```
+
 ## Dependencies
 
 This project requires the [PDFium](https://pdfium.googlesource.com/pdfium/) library for PDF rendering. Make sure `libpdfium` is available in your library path.
